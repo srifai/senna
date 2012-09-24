@@ -1,0 +1,117 @@
+% !TEX TS-program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+% This is a simple template for a LaTeX document using the "article" class.
+% See "book", "report", "letter" for other types of document.
+
+\documentclass[11pt]{article} % use larger type; default would be 10pt
+
+\usepackage[utf8]{inputenc} % set input encoding (not needed with XeLaTeX)
+
+%%% Examples of Article customizations
+% These packages are optional, depending whether you want the features they provide.
+% See the LaTeX Companion or other references for full information.
+
+%%% PAGE DIMENSIONS
+\usepackage{geometry} % to change the page dimensions
+\geometry{a4paper} % or letterpaper (US) or a5paper or....
+% \geometry{margin=2in} % for example, change the margins to 2 inches all round
+% \geometry{landscape} % set up the page for landscape
+%   read geometry.pdf for detailed page layout information
+
+\usepackage{graphicx} % support the \includegraphics command and options
+
+% \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
+
+%%% PACKAGES
+\usepackage{booktabs} % for much better looking tables
+\usepackage{array} % for better arrays (eg matrices) in maths
+\usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
+\usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
+\usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+% These packages are all incorporated in the memoir class to one degree or another...
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr} % This should be set AFTER setting up the page geometry
+\pagestyle{fancy} % options: empty , plain , fancy
+\renewcommand{\headrulewidth}{0pt} % customise the layout...
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+%%% SECTION TITLE APPEARANCE
+\usepackage{sectsty}
+\allsectionsfont{\sffamily\mdseries\upshape} % (See the fntguide.pdf for font help)
+% (This matches ConTeXt defaults)
+
+%%% ToC (table of contents) APPEARANCE
+\usepackage[nottoc,notlof,notlot]{tocbibind} % Put the bibliography in the ToC
+\usepackage[titles,subfigure]{tocloft} % Alter the style of the Table of Contents
+\renewcommand{\cftsecfont}{\rmfamily\mdseries\upshape}
+\renewcommand{\cftsecpagefont}{\rmfamily\mdseries\upshape} % No bold!
+\usepackage{amsmath}
+\usepackage{amssymb}
+%%% END Article customizations
+
+%%% The "real" document content comes below...
+
+\title{Exploration Framework For Semantic Learning}
+\author{Salah Rifai}
+%\date{} % Activate to display a given date or no date (if empty),
+         % otherwise the current date is printed 
+
+\begin{document}
+\maketitle
+\section{Definitions}
+\begin{tabular}{r l}
+ $\mathcal{D}$ &:  collection of documents (Text Corpora), \\
+$\mathcal{V} = \left\{0,\ldots,n\right\}$ &: vocabulary of $n$ words \\
+ $w \in \mathcal{V}$ &: word index in the vocabulary,\\
+ $d = (w_1,\ldots,w_k) \in \mathcal{D}$ &: sequence of words, \\
+$E \in \mathcal{M}_{n,h}(\mathbb{R})$&: matrix of $n$ word embeddings of size $h$\\
+$\spadesuit(w) \in \{0,1\}^n$&: onehot($w$), \\
+$\clubsuit(d) \in \mathbb{N}^n$&: count($d$), \\
+$ \nu_w (d) \in \left[0,1\right]$ &: word tf-idf($w$,$d$,$D$) factor, \\
+$\nu(d) \in  \left[0,1\right]^n$&: document tf-idf($d$,$D$) vector, \\
+$ e(w)=\left(E\cdot\spadesuit\left(w\right)\right)  \in \mathbb{R}^h$&: embedding associated with word $w$.
+\end{tabular} 
+
+\section{Local context score}
+\subsection{Baseline: Senna}
+
+\[ L_{senna} \left(w_i\ldots w_{i+t}  | u,W,E\right) = u \cdot \phi \left( W \cdot \left[ e\left(w_i\right) \ldots e\left(w_{i+t}\right) \right] \right)  \]
+
+where:
+$\phi$ is a non-linearity, $t \in \mathbb{N}$ is the window size, $u \in \mathbb{R}^d$  $W \in \mathcal{M}_{h,d}(\mathbb{R})$
+\subsection{Proposals}
+\subsubsection{Recurrent connections on convolutional features}
+Let $\Omega_i =  \left(w_i\ldots w_{i+t} \right)$ and define the recurrent layer as:
+\[\displaystyle h \left(w_i\ldots w_{i+t} \right) = \phi\left( W \cdot \left[ e\left(w_i\right) \ldots e\left(w_{i+t}\right) \right] + U  \cdot h \left(w_{i-c}\ldots w_{i+t-c} \right)\right)\]
+where $c$ is the historical timestep. Define the corresponding score:
+\[ L_{recurrent} \left(w_i\ldots w_{i+t} \right | u,W,U,E) = u \cdot h \left(w_i\ldots w_{i+t} \right)   \]
+
+Tomas Mikolov uses this approach with a unitary window size, is there any difference when the input layer is convolutional?
+
+\section{Global context score}
+\subsection{Baseline: Socher}
+\[G_{socher}(d,w_i| v,Y,E) = v \cdot \phi\left(Y\left[e(w_i),\sum_{w\in d} \nu_w (d) e(w) \right] \right) \]
+and combining both local and global context to define his score:
+\[ S_{socher}(d,w_i\ldots w_{i+t}| u,v,Y,W,E) = G_{socher}(d,w_{i+\frac{t}{2}}| v,Y,E)  + L_{senna} \left(w_i\ldots w_{i+t}  | u,W,E\right) \]
+
+\subsection{Regularization proposal}
+\subsubsection{Auto-regressors' like}
+Given the tf-idf representation of the document where the word $w_i$ occurs, we predict $w_i$ using a softmax ouput layer. 
+We scale the negative likelihood objective by the tf-idf factor associated with $w_i$ to discard topic irrelevant words from the learning process:
+\[
+J_{autoregressor} (d,w_i|E,R) = -\nu_{w_i}(d) . \log\left( \mathrm{s}_{w_i}\left(R\cdot \left(E \cdot \nu\left(d_{-w_i}\right)\right)\right)\right)
+\]
+where $\nu\left(d_{-w_i}\right)$ is the tf-idf representation of $d$ with $w_i$ zeroed and $s_{w_i}$ the $w_i$-th output of the softmax layer.
+\subsection{Auto-encoders' like}
+\[
+J_{autoencoder} (d,w_i| E,R) = \sum_{w\in d} \nu_w\left(d\right) . \left( r_w \left( \rho \right) - \rho \right)^2 
+\]
+
+where reconstruction is defined by $r_w(\rho) = \phi\left(R_w\cdot\left(E\cdot\rho\right)\right)$ and $\rho = \mathrm{bin}\left(\nu\left(d\right)\right)$ the binary representation of the document $d$. Note that we canset $R=E^T$ to reduce the number of parameters.
+
+We depart from socher's approach in the sense that we are combining a score for the local context regularized to capture global context.
+\end{document}
+

@@ -1,7 +1,7 @@
 from dataset.DatasetInterfaces import root
 
 from util.embedding import knn, display
-from util.cost import nll, hardmax
+from util.cost import nll, hardmax, cepond, nllsoft,ce
 from util.expr import rect, identity, hardtanh
 from util.io import save, load
 from util.sparse import idx2spmat, idx2mat, idx2vec
@@ -33,6 +33,8 @@ def run(jobman,debug = False):
 
     # Symbolic variables
     s_bow = T.matrix()
+    s_idx = T.iscalar()
+    s_tf = T.scalar()
     s_posit = T.matrix()#theano.sparse.csr_matrix()
     s_negat = T.matrix()#theano.sparse.csr_matrix()
 
@@ -42,13 +44,14 @@ def run(jobman,debug = False):
     gsubset = cPickle.load(open('/scratch/rifaisal/data/guten/guten_vocab_subset.pkl')).flatten().tolist()
     hashtab = dict( zip( gsubset, range( len( gsubset))))    
 
+    tfidf_data = numpy.load('/scratch/rifaisal/data/guten/guten_tfidf.npy').item().tocsr().astype('float32')
+
+    #tfidf = cPickle.load(open('/scratch/rifaisal/repos/senna/gutentokenizer.pkl'))
+
     senna = numpy.array(senna)[gsubset].tolist()
     s_valid = theano.sparse.csr_matrix()
 
-    validsentence = sentences[-10:]
-    sentences = sentences[:-10]
-
-
+    validsentence = sentences[10000:10010]
 
 
     nsent = len(sentences)
@@ -56,11 +59,14 @@ def run(jobman,debug = False):
 
     # Layers
     
-    embedding = cae(i_size=nsenna, h_size=hp['embedsize'], e_act = T.nnet.sigmoid)
-    H = ae(i_size = hp['embedsize']*hp['wsize'], h_size=hp['hsize'], e_act = rect, d_act = hardtanh)
-    L = logistic(i_size = hp['hsize'],  h_size = 1)
+    embedding = cae(i_size=nsenna, h_size=hp['embedsize'], e_act = identity)
 
-    valid_embedding = sparse.supervised.logistic(i_size=nsenna, h_size=hp['embedsize'], act = T.nnet.sigmoid)
+    H = ae(i_size = hp['embedsize']*hp['wsize'], h_size=hp['hsize'], e_act = T.tanh)
+    L = logistic(i_size = hp['hsize'], h_size = 1)
+    S = logistic(i_size = hp['embedsize'], h_size = nsenna, act=T.nnet.softmax)
+
+
+    valid_embedding = sparse.supervised.logistic(i_size=nsenna, h_size=hp['embedsize'], act = identity)
     valid_embedding.params['weights'] = sp.shared(value = scipy.sparse.csr_matrix(embedding.params['e_weights'].get_value(borrow=True)))
     valid_embedding.params['bias'] = embedding.params['e_bias']
 
@@ -68,9 +74,9 @@ def run(jobman,debug = False):
     h_size = hp['hsize']
     bs = hp['bs']
 
-    posit_embed = embedding.encode(s_posit).reshape((1,hp['embedsize']*hp['wsize']))
-    negat_embed = embedding.encode(s_negat).reshape((hp['nneg'],hp['embedsize']*hp['wsize']))
-    valid_embed = valid_embedding.encode(s_valid).reshape((nsenna,hp['embedsize']*hp['wsize']))
+    posit_embed = T.dot(s_posit, embedding.params['e_weights']).reshape((1,hp['embedsize']*hp['wsize']))
+    negat_embed = T.dot(s_negat, embedding.params['e_weights']).reshape((hp['nneg'],hp['embedsize']*hp['wsize']))
+    valid_embed = sp.dot(s_valid,valid_embedding.params['weights']).reshape((nsenna,hp['embedsize']*hp['wsize']))
 
     posit_score = L.encode(H.encode(posit_embed))
     negat_score = L.encode(H.encode(negat_embed))
@@ -78,12 +84,16 @@ def run(jobman,debug = False):
 
     C = (negat_score - posit_score.flatten() + hp['margin'])
 
-    rec = embedding.reconstruct(s_bow, loss='ce')
-    CC = (rect(C)).mean() + hp['lambda'] * rec
+    s_bow_pred = S.encode(embedding.encode(s_bow))
 
-    opt = theano.function([s_posit, s_negat, s_bow], 
-                          [C.mean(),rec], 
-                          updates = dict( L.update(CC,lr) + H.update(CC,lr) + embedding.update(CC,lr)) )
+
+    pred = s_tf * nllsoft(s_bow_pred,s_idx)
+    
+    CC = (rect(C)).mean() + hp['lambda'] * pred
+
+    opt = theano.function([s_posit, s_negat, s_bow, s_idx, s_tf], 
+                          [C.mean(),pred], 
+                          updates = dict( S.update(CC,lr) + L.update(CC,lr) + H.update(CC,lr) + embedding.update_norm(CC,lr)) )
 
     validfct = theano.function([s_valid],valid_score)
 
@@ -91,7 +101,6 @@ def run(jobman,debug = False):
         save(embedding,fname+'embedding.pkl')
         save(H,fname+'hidden.pkl')
         save(L,fname+'logistic.pkl')
-        print 'Saved successfully'
 
     delta = hp['wsize']/2
     rest = hp['wsize']%2
@@ -104,6 +113,7 @@ def run(jobman,debug = False):
     for e in range(hp['epoch']):
         c = []
         r = []
+        count = 1
         for i in range(nsent):
             rsent = numpy.random.randint(nsent-1)
             nword = len(sentences[rsent])
@@ -122,36 +132,42 @@ def run(jobman,debug = False):
 
 
             assert len(nchunk) == len(pchunk)*hp['nneg']
-
-            p, n, b = (idx2mat(pchunk,nsenna), idx2mat(nchunk,nsenna), idx2vec(sentences[rsent],nsenna))
-
-            l,g = opt(p,n,b)
+            tfidf_chunk = tfidf_data[rsent:rsent+1].toarray()
+            #pdb.set_trace()
+            tfidf_value = tfidf_chunk[0,sentences[rsent][pidx]]
+            tfidf_chunk[0,sentences[rsent][pidx]] = 0.
+            tfidx = sentences[rsent][pidx] # numpy.zeros(tfidf_chunk.shape).astype('float32')
+            #tfidx[0,sentences[rsent][pidx]] = 1.
+            p, n, b, iidx, tfval = (idx2mat(pchunk,nsenna), idx2mat(nchunk,nsenna), tfidf_chunk, tfidx, tfidf_value )
+            count += tfval!=0
+            l,g = opt(p,n,b, iidx, tfval)
             c.append(l)
             r.append(g)
             
-            if (time.time() - expstart) > ( 3600 * 24 * 6 + 3600*20) or (i+1)%(50*hp['freq']) == 0:
+            if (time.time() - expstart) > ( 3600 * 24 * 6 + 3600*20) or (i+1)%(20*hp['freq']) == 0 and debug==False:
                 valid_embedding.params['weights'] = sp.shared(value = scipy.sparse.csr_matrix(embedding.params['e_weights'].get_value(borrow=True)))
                 mrk = evaluation.error(validsentence, validfct, nsenna, hp['wsize'])
                 hp['mrk'] = mrk
-                hp['e'] = e
-                hp['i'] = i
                 jobman.save()
                 saveexp()
                 print 'Random Valid Mean rank',mrk
 
-            if i%hp['freq'] == 0:
+            if (i+1)%hp['freq'] == 0 or debug:
                 hp['score'] = numpy.array(c).mean()
-                hp['rec'] = numpy.array(r).mean()
-                print e,i,'NN Score:', hp['score'], 'Reconstruction:', hp['rec']
+                hp['pred'] = numpy.array(r).sum()/float(count)
+                hp['e'] = e
+                hp['i'] = i
+                print ''
+                print e,i,'NN Score:', hp['score'], 'Reconstruction:', hp['pred']
 
-                ne = knn(freq_idx,embedding.params['e_weights'].get_value(borrow=True))
-                open('files/'+fname+'nearest.txt','w').write(display(ne,senna))
-
-                saveexp()
+                if debug != True:
+                    ne = knn(freq_idx,embedding.params['e_weights'].get_value(borrow=True))
+                    open('files/'+fname+'nearest.txt','w').write(display(ne,senna))
+                    saveexp()
                 sys.stdout.flush()
                 jobman.save()
                 
-    save()
+    saveexp()
 
 def jobman_entrypoint(state, channel):
     jobhandler = JB.JobHandler(state,channel)
@@ -160,17 +176,16 @@ def jobman_entrypoint(state, channel):
 
 
 if __name__ == "__main__":
-    HP_init = [ ('values','dataset',['/data/lisatmp/mullerx/jfk3/amz_dvd_3_files_dict.pkl']),
-                ('values','adjmat',['/data/lisatmp/mesnilgr/datasets/jfkd/adjacency/adjacenty_lil_matrix_indomain_movies.npy']),
-                ('values','epoch',[100]),
+    HP_init = [ ('values','epoch',[100]),
+                ('values','deviation',[.1]),
                 ('values','freq',[10000]),
                 ('values','hsize',[100]),
                 ('values','embedsize',[50,100,200]),
                 ('values','wsize',[5]),
                 ('values','npos',[1]),
                 ('values','nneg',[10]),
-                ('values','lr',[0.001,.0001,.01]),
-                ('values','lambda',[.01,.001,.0001]),
+                ('values','lr',[0.01,.0001,.001]),
+                ('values','lambda',[.1,.01]),
                 ('values','margin',[1.]),
                 ('values','bs',[10]) ]
 
