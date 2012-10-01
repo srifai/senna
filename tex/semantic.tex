@@ -77,7 +77,9 @@ $\Omega_i^t =  \left[e_{i-\frac{t}{2}} \ldots e_{i}  \ldots e_{i+\frac{t}{2}} \r
 \end{tabular} 
 
 \section{Local context score}
-This sections describes some of the latest best performing approach that models embeddings according to local context. The term "local" refers to the words' window-size.
+This sections describes some of the latest best performing approach
+that models embeddings according to local context. The term "local"
+refers to the words' window-size.
 \subsection{Senna}
 
 \[ L_{senna} \left(\Omega_i^t | u,W,E\right) = u \cdot \phi \left( W \cdot \Omega_i^t \right)  \]
@@ -86,12 +88,18 @@ where:
 $\phi$ is a non-linearity, $t \in \mathbb{N}$ is the window size, $u \in \mathbb{R}^d$  $W \in \mathcal{M}_{h,d}(\mathbb{R})$
 \subsection{Proposals}
 \subsubsection{Recurrent connections on convolutional features}
-Yoshua's proposal to combine both convolution and recurrence in the hidden layer:
+Yoshua's proposal to combine both convolution and recurrence in the
+hidden layer:
+
+
 \[\displaystyle h \left(\Omega_i^t \right) = \phi\left( W \cdot \Omega_i^t + U  \cdot h \left(\Omega_{i-c}^{t}\right)\right)\]
+
 where $c$ is the historical timestep. Define the corresponding score:
+
 \[ L_{recurrent} \left(\Omega_0^t \ldots \Omega_{i}^t  | u,W,U,E\right) = u \cdot h \left( \Omega_0^t \ldots \Omega_{i}^t  \right)   \]
 
-Tomas Mikolov uses this approach with a unitary window size, is there any difference when the input layer is convolutional?
+Tomas Mikolov uses this approach with a unitary window size, is there
+any difference when the input layer is convolutional?
 
 \subsection{Differential approach to the score function}
 
@@ -100,72 +108,140 @@ We pose:
 \item $f(\Omega_i^t) = \phi \left( W \cdot \Omega_i^t\right)$
 \item $\tilde{\Omega}_i^t = \left[e_{i-\frac{t}{2}} \ldots \tilde{e}_{i}  \ldots e_{i+\frac{t}{2}} \right] $
 \end{itemize} 
-where $\tilde{e}_{i}\neq e_i$ a random word from $\mathcal{V}$. Define the ranking criterion as:
+where $\tilde{e}_{i}\neq e_i$ a random word from $\mathcal{V}$. Define
+the ranking criterion as:
 \begin{equation}
 \label{eq:senna}
-\displaystyle C_{senna}(u,W,E) = \sum_i \sum_{\tilde e \in E} \max \left(0,1 - u \cdot \left[ f\left(\Omega_i^t\right)   - f\left(\tilde{\Omega}_i^t\right)  \right] \right) 
+\displaystyle C_{senna}(u,W,E) = \sum_i \sum_{\tilde e \in E} \max
+\left(0,1 - u \cdot \left[ f\left(\Omega_i^t\right) -
+  f\left(\tilde{\Omega}_i^t\right) \right] \right)
 \end{equation}
 
-Posing $\delta = \tilde{e}_i - e_{i}$ and considering an infinitesimal move $\epsilon$ in the direction of $\delta$:
+Posing $\delta = \tilde{e}_i - e_{i}$ and considering an infinitesimal
+move $\epsilon$ in the direction of $\delta$:
+
 \begin{equation}
 \label{eq:approx}
 f\left(\Omega_i\right)   - f\left(\left[ e_{i-\frac{t}{2}} \ldots (e_{i} + \epsilon . \delta)  \ldots e_{i+\frac{t}{2}}\right]\right)  \approx \epsilon \frac{\partial f }{\partial  \Omega} \left(\Omega_i\right) \cdot \left( 0\ldots \delta \ldots 0\right)
 \end{equation}
-Note that when $\epsilon = 1$ we fall back on our feet, but the approximation is no longer true.
-Geometrically, the term in equation \ref{eq:approx} controls the sensitivity of the representation $f$ at point $\Omega_i$ when moving "smoothly" the middle word embedding word $e_{i}$ in direction of $\delta$. Evidently a good representation is one that has low variations in the directions of words that are semantically related  to $e_{i}$ and high variations otherwise. Using this intuition, for each word embedding $e$ occuring in a window $\Omega$, we define the subspace $\mathcal{S}_{\Omega,e}$ of semantically related words as the kernel of the Jacobian of $f$:
+
+Note that when $\epsilon = 1$ we fall back on our feet, but the
+approximation is no longer true.  Geometrically, the term in equation
+\ref{eq:approx} controls the sensitivity of the representation $f$ at
+point $\Omega_i$ when moving "smoothly" the middle word embedding word
+$e_{i}$ in direction of $\delta$. Evidently a good representation is
+one that has low variations in the directions of words that are
+semantically related to $e_{i}$ and high variations otherwise. Using
+this intuition, for each word embedding $e$ occuring in a window
+$\Omega$, we define the subspace $\mathcal{S}_{\Omega,e}$ of
+semantically related words as the kernel of the Jacobian of $f$:
+
 \begin{equation}
-\mathcal{S}_{\Omega_i,e_{i}} = \operatorname{Ker}\left( \frac{\partial f(\Omega_i) }{\partial  \Omega} \right)
+\mathcal{S}_{\Omega_i,e_{i}} = \operatorname{Ker}\left( \frac{\partial
+  f(\Omega_i) }{\partial \Omega} \right)
 \end{equation}
 
 
 
-There are 3 different scenarios in which Equation \ref{eq:approx} tends to $0$:
+There are 3 different scenarios in which Equation \ref{eq:approx}
+tends to $0$:
 \begin{itemize}
 \item $\delta = \tilde{e} - e_{i} \longrightarrow 0$,
 \item  $\frac{\partial f(\Omega_i) }{\partial  \Omega}\longrightarrow  0$,
 \item $\delta \in \operatorname{Ker} \left( \frac{\partial f(\Omega_i) }{\partial  \Omega} \right)$
 
 \end{itemize}
-An uninteresting case is when the jacobian of the score function is $0$ which represents a constant mapping.
+An uninteresting case is when the jacobian of the score function is
+$0$ which represents a constant mapping.
 
-In practice, one of the possible solution to the score approachs like in (C\&W) is to find a matrix embedding $E$,
-such that $\delta = 0$ when two words are semantically related, hence obtaining invariance of the score function.
+In practice, one of the possible solution to the score approachs like
+in (C\&W) is to find a matrix embedding $E$, such that $\delta = 0$
+when two words are semantically related, hence obtaining invariance of
+the score function.
 
-Perhaps, one of the most interesting cases is when $\delta$ is orthogonal to $\frac{\partial f(\Omega_i) }{\partial  \Omega}$. We can interpret this as two words being semantically related only in a particular context $\Omega_i$. Note that this type of semantical similarity cannot be revealed by the euclidian distance between embeddings and depends on both the context $\Omega_i$ and the parameters $W$ of the score function. In the case of a totally linear score function (Turian), the term $\frac{\partial f(\Omega_i) }{\partial  \Omega} = W$ does not hold any contextual semantics and depends exclusively on the parameters $W$ of the hidden layers.
+Perhaps, one of the most interesting cases is when $\delta$ is
+orthogonal to $\frac{\partial f(\Omega_i) }{\partial \Omega}$. We can
+interpret this as two words being semantically related only in a
+particular context $\Omega_i$. Note that this type of semantical
+similarity cannot be revealed by the euclidian distance between
+embeddings and depends on both the context $\Omega_i$ and the
+parameters $W$ of the score function. In the case of a totally linear
+score function (Turian), the term $\frac{\partial f(\Omega_i)
+}{\partial \Omega} = W$ does not hold any contextual semantics and
+depends exclusively on the parameters $W$ of the hidden layers.
 
-Given this interpretation we define two types of semantical similarity:
+Given this interpretation we define two types of semantical
+similarity:
+
 \begin{itemize}
 \item Context-Independant Similarity between words.
 \item Contextual  Similarity between words,
 \end{itemize}
 
 
-In reality, the context-independant similarity traduces the idea that the semantics associated to embeddings are the average meaning of the words in all possible contexts, this happens in the linear case.
+In reality, the context-independant similarity traduces the idea that
+the semantics associated to embeddings are the average meaning of the
+words in all possible contexts, this happens in the linear case.
 
-To what extent the embeddings of (C\&W) captures the contextual similarity? This should be possible in their setting which uses a $\operatorname{HardTanh}$ non-linearity, though the $100$ HU capacity should be very limiting, and it wouldn't be surprising if their model is rarely satured, and mostly acts like a linear mapping.
+To what extent the embeddings of (C\&W) captures the contextual
+similarity? This should be possible in their setting which uses a
+$\operatorname{HardTanh}$ non-linearity, though the $100$ HU capacity
+should be very limiting, and it wouldn't be surprising if their model
+is rarely satured, and mostly acts like a linear mapping.
+
 \subsubsection{Measuring contextual similarity}
 \begin{equation}
-d_{\Omega_i}(e_i, e_j) = \left|  \frac{\partial f }{\partial  \Omega} \left(\Omega_i\right) \cdot \left[ 0\ldots e_j-e_i \ldots 0\right] \right|_2
+d_{\Omega_i}(e_i, e_j) = \left| \frac{\partial f }{\partial \Omega}
+\left(\Omega_i\right) \cdot \left[ 0\ldots e_j-e_i \ldots 0\right]
+\right|_2
 \end{equation}
+
 which can be used to rank the most contextually related words.
 
 \subsubsection{Training criterion}
-This approach clearly relies on a very expressive model, indeed we need to have enough capacity to express all the possible context configuration in the language. This intuition seems to be in contradiction with reports in the litterature stating that the capacity of the hidden layer was not impactful on the performance of the model. 
+This approach clearly relies on a very expressive model, indeed we
+need to have enough capacity to express all the possible context
+configuration in the language. This intuition seems to be in
+contradiction with reports in the litterature stating that the
+capacity of the hidden layer was not impactful on the performance of
+the model.
 
-We hypothesis that this was due to the (1) lack of regularization of the models, and to (2) the difficulty of training jointly the word embeddings and the hidden layer parameters.
+We hypothesis that this was due to the (1) lack of regularization of
+the models, and to (2) the difficulty of training jointly the word
+embeddings and the hidden layer parameters.
 
-(1) is addressed by adding an extra term to our score function, which encourages it to vary accross all possible directions $\tilde{\delta}_{i} = \tilde{e} - e_i$ of the vocabulary $\mathcal{V}$:
+(1) is addressed by adding an extra term to our score function, which
+encourages it to vary accross all possible directions
+$\tilde{\delta}_{i} = \tilde{e} - e_i$ of the vocabulary
+$\mathcal{V}$:
 
 \begin{equation}
 \label{eq:newscore}
 \displaystyle C(u,W,E) = \sum_i \sum_{\tilde e \in E} \max \left(0,m - u \cdot \left[ f\left(\Omega_i^t\right)   
 - f\left(\tilde{\Omega}_i^t\right) + \frac{\partial f }{\partial  \Omega} \left(\Omega_i^t\right) \cdot \left[ 0\ldots\tilde{\delta}_{i} \ldots 0\right]  \right] \right) 
 \end{equation}
-In order to train our large architecture, we choose to pretrain our embeddings using only senna's approach. We initialize another network with large hidden layer and we optimize it using sgd using \ref{eq:newscore} and freezing the embeddings weights to simplify the optimization and to capture only contextual semantics. Also note that the criterion we are adding $\frac{\partial f }{\partial  \Omega} \left(\Omega_i^t\right) \cdot \left[ 0\ldots\tilde{\delta}_{i} \ldots 0\right] $ might seem redundant with equation \ref{eq:senna}, so we might want to try it alone, or without when using the pretraining strategy of the embeddings.
+
+In order to train our large architecture, we choose to pretrain our
+embeddings using only senna's approach. We initialize another network
+with large hidden layer and we optimize it using sgd using
+\ref{eq:newscore} and freezing the embeddings weights to simplify the
+optimization and to capture only contextual semantics. Also note that
+the criterion we are adding $\frac{\partial f }{\partial \Omega}
+\left(\Omega_i^t\right) \cdot \left[ 0\ldots\tilde{\delta}_{i} \ldots
+  0\right] $ might seem redundant with equation \ref{eq:senna}, so we
+might want to try it alone, or without when using the pretraining
+strategy of the embeddings.
+
 \subsection{From local to global  semantics with deepnets}
-In senna's approach the words are considered as the atom elements of the architecture. After training senna, we can instead view $f(\Omega_i^t)$ as the atom element of another architecture, and learn a scoring function a la senna,
-in which the negative samples will be text chunks of size $t$.
-This approach is particulary appealing since it factors with deep networks the increasingly complex semantics when considering large windows of text.
+
+In senna's approach the words are considered as the atom elements of
+the architecture. After training senna, we can instead view
+$f(\Omega_i^t)$ as the atom element of another architecture, and learn
+a scoring function a la senna, in which the negative samples will be
+text chunks of size $t$.  This approach is particulary appealing since
+it factors with deep networks the increasingly complex semantics when
+considering large windows of text.
+
 \subsubsection{Training}
 \begin{itemize}
 \item Greedily + global finetune
@@ -181,22 +257,35 @@ and combining both local and global context to define his score:
 
 \subsection{Regularization proposal}
 \subsubsection{Auto-regressors' like}
-Given the tf-idf representation of the document where the word $w_i$ occurs, we predict $w_i$ using a softmax ouput layer. 
-We scale the negative likelihood objective by the tf-idf factor associated with $w_i$ to discard topic irrelevant words from the learning process:
+
+Given the tf-idf representation of the document where the word $w_i$
+occurs, we predict $w_i$ using a softmax ouput layer.  We scale the
+negative likelihood objective by the tf-idf factor associated with
+$w_i$ to discard topic irrelevant words from the learning process:
+
 \[
 J_{autoregressor} (d,w_i|E,R) = -\nu_{w_i}(d) . \log\left( \mathrm{s}_{w_i}\left(R\cdot \left(E \cdot \nu\left(d_{-w_i}\right)\right)\right)\right)
 \]
-where $\nu\left(d_{-w_i}\right)$ is the tf-idf representation of $d$ with $w_i$ zeroed and $s_{w_i}$ the $w_i$-th output of the softmax layer.
+
+where $\nu\left(d_{-w_i}\right)$ is the tf-idf representation of $d$
+with $w_i$ zeroed and $s_{w_i}$ the $w_i$-th output of the softmax
+layer.
+
 \subsection{Auto-encoders' like}
 \[
 J_{autoencoder} (d,w_i| E,R) = \sum_{w\in d} \nu_w\left(d\right) . \left( r_w \left( \rho \right) - \rho_w \right)^2 
 \]
 
-where reconstruction is defined by $r_w(\rho) = \phi\left(R_w\cdot\left(E\cdot\rho\right)\right)$ and $\rho_w = \mathrm{sign}\left(\nu_w\left(d\right)\right)$ the binary representation of the document $d$. Note that we canset $R=E^T$ to reduce the number of parameters.
+where reconstruction is defined by $r_w(\rho) =
+\phi\left(R_w\cdot\left(E\cdot\rho\right)\right)$ and $\rho_w =
+\mathrm{sign}\left(\nu_w\left(d\right)\right)$ the binary
+representation of the document $d$. Note that we canset $R=E^T$ to
+reduce the number of parameters.
 
-The final objective is the combination of $L_{senna} $ local context modelization with either $J_{autoregressor}$ or $J_{autoencoder}$ as regularization which is conceptually different from socher's approach in the sense that we are doing a maximum likelihood approach combined with a regularization to capture global context.
-
-
-
+The final objective is the combination of $L_{senna} $ local context
+modelization with either $J_{autoregressor}$ or $J_{autoencoder}$ as
+regularization which is conceptually different from socher's approach
+in the sense that we are doing a maximum likelihood approach combined
+with a regularization to capture global context.
 
 \end{document}
