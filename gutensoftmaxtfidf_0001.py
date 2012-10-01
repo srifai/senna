@@ -62,8 +62,8 @@ def run(jobman,debug = False):
     embedding = cae(i_size=nsenna, h_size=hp['embedsize'], e_act = identity)
 
     H = ae(i_size = hp['embedsize']*hp['wsize'], h_size=hp['hsize'], e_act = T.tanh)
-    L = logistic(i_size = hp['hsize'], h_size = 1)
-    S = logistic(i_size = hp['embedsize'], h_size = nsenna, act=T.nnet.softmax)
+    L = logistic(i_size = hp['hsize'], h_size = 1, act = identity)
+    S = logistic(i_size = hp['embedsize'], h_size = nsenna, act= T.nnet.softmax)
 
 
     valid_embedding = sparse.supervised.logistic(i_size=nsenna, h_size=hp['embedsize'], act = identity)
@@ -92,10 +92,10 @@ def run(jobman,debug = False):
     CC = (rect(C)).mean() + hp['lambda'] * pred
 
     opt = theano.function([s_posit, s_negat, s_bow, s_idx, s_tf], 
-                          [C.mean(),pred], 
+                          [(rect(C)).mean(),pred], 
                           updates = dict( S.update(CC,lr) + L.update(CC,lr) + H.update(CC,lr) + embedding.update_norm(CC,lr)) )
 
-    validfct = theano.function([s_valid],valid_score)
+    #validfct = theano.function([s_valid],valid_score)
 
     def saveexp():
         save(embedding,fname+'embedding.pkl')
@@ -141,9 +141,11 @@ def run(jobman,debug = False):
             p, n, b, iidx, tfval = (idx2mat(pchunk,nsenna), idx2mat(nchunk,nsenna), tfidf_chunk, tfidx, tfidf_value )
             count += tfval!=0
             l,g = opt(p,n,b, iidx, tfval)
+            c = c
             c.append(l)
             r.append(g)
-            
+
+            """
             if (time.time() - expstart) > ( 3600 * 24 * 6 + 3600*20) or (i+1)%(20*hp['freq']) == 0 and debug==False:
                 valid_embedding.params['weights'] = sp.shared(value = scipy.sparse.csr_matrix(embedding.params['e_weights'].get_value(borrow=True)))
                 mrk = evaluation.error(validsentence, validfct, nsenna, hp['wsize'])
@@ -151,9 +153,10 @@ def run(jobman,debug = False):
                 jobman.save()
                 saveexp()
                 print 'Random Valid Mean rank',mrk
+            """
 
             if (i+1)%hp['freq'] == 0 or debug:
-                hp['score'] = numpy.array(c).mean()
+                hp['score'] = numpy.array(c).sum() / (numpy.array(c)>0).sum()
                 hp['pred'] = numpy.array(r).sum()/float(count)
                 hp['e'] = e
                 hp['i'] = i
