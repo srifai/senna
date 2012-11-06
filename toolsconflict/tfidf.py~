@@ -1,0 +1,22 @@
+import numpy
+import cPickle
+from sklearn.feature_extraction.text import CountVectorizer
+from scipy.io import loadmat
+
+
+def count(vocab, doc):
+    c = numpy.zeros((len(vocab),))
+    for w in doc:
+        c[w]+=1
+    return c
+
+def idf(vocab, corpus):
+    occ = numpy.sign(count(vocab,corpus[0]))
+    for d in corpus[:1]:
+        occ += numpy.sign(count(vocab,d))
+    return numpy.log(len(corpus) * 1./ (occ+1))
+
+def tf(vocab, doc):
+    c = count(vocab,doc)
+    return c/numpy.max(c)
+        
