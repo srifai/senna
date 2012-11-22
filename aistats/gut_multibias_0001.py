@@ -1,8 +1,8 @@
 from dataset.DatasetInterfaces import root
 
 from util.embedding import knn, display
-from util.cost import nll, hardmax, cepond, nllsoft,ce
-from util.expr import rect, identity, hardtanh
+from util.cost import nll, hardmax, ce
+from util.expr import rect, identity
 from util.io import save, load
 from util.sparse import idx2spmat, idx2mat, idx2vec
 
@@ -24,7 +24,7 @@ import numpy
 import sys,pdb,cPickle,os,copy
 import time
 
-from toolsconflict.tfidf import tf
+
 
 def run(jobman,debug = False):
     expstart = time.time()
@@ -41,7 +41,7 @@ def run(jobman,debug = False):
 
 
 
-    w2i = cPickle.load(open('/scratch/rifaisal/data/gutenberg_aistats/merged_word2idx.pkl'))
+    w2i = cPickle.load(open('/mnt/scratch/bengio/bengio_group/data/gutenberg/merged_word2idx.pkl'))
     i2w = dict( (v,k) for k,v in w2i.iteritems() )
     i2w[0] = 'UNK'
     senna = [ i2w[i] for i in range(len(i2w.keys())) ]
@@ -52,7 +52,10 @@ def run(jobman,debug = False):
     embedding = cae(i_size=nsenna, h_size=hp['embedsize'], e_act = identity)
     H = ae(i_size = hp['embedsize']*hp['wsize'], h_size=hp['hsize'], e_act = T.tanh)
     L = logistic(i_size = hp['hsize'], h_size = 1, act = identity)
- 
+
+    del H.params['d_bias']
+    del embedding.params['d_bias']
+    del embedding.params['e_bias']
     minsize = hp['minsize']
     maxsize = hp['maxsize']
 
@@ -73,7 +76,7 @@ def run(jobman,debug = False):
     H.params['e_bias'] = theano.shared( numpy.array(numpy.zeros((dsize,hp['hsize'])),dtype=theano.config.floatX),name='e_bias')
     valid_embedding = sparse.supervised.logistic(i_size=nsenna, h_size=hp['embedsize'], act = identity)
     valid_embedding.params['weights'] = sp.shared(value = scipy.sparse.csr_matrix(embedding.params['e_weights'].get_value(borrow=True)))
-    valid_embedding.params['bias'] = embedding.params['e_bias']
+
 
     lr = hp['lr']
     h_size = hp['hsize']
@@ -136,13 +139,13 @@ def run(jobman,debug = False):
     delta = hp['wsize']/2
     rest = hp['wsize']%2
 
-    freq_idx = cPickle.load(open('/scratch/rifaisal/data/gutenberg_aistats/sorted_vocab.pkl'))[:2000]
+    freq_idx = cPickle.load(open('/mnt/scratch/bengio/bengio_group/data/gutenberg/sorted_vocab.pkl'))[:2000]
     fname = ''
-    validsentence = cPickle.load(open('/scratch/rifaisal/data/wiki_april_2010/valid_debug.pkl'))
+    validsentence = []# cPickle.load(open('/scratch/rifaisal/data/wiki_april_2010/valid_debug.pkl'))
     tseenwords = not debug
     for e in range(hp['epoch']):
         hp['split'] = numpy.random.randint(45)
-        sentences = cPickle.load(open('/scratch/rifaisal/data/gutenberg_aistats/split'+str(hp['split'])+'.pkl'))
+        sentences = cPickle.load(open('/mnt/scratch/bengio/bengio_group/data/gutenberg/ints_50000/split'+str(hp['split'])+'.pkl'))
         nsent = len(sentences)
         bigc = []
         bigr = []
@@ -222,8 +225,8 @@ def run(jobman,debug = False):
 
 def jobman_entrypoint(state, channel):
     jobhandler = JB.JobHandler(state,channel)
-    #run(jobhandler,True)
-    run(jobhandler,False)
+    run(jobhandler,True)
+    #run(jobhandler,False)
     return 0
 
 
@@ -240,7 +243,7 @@ if __name__ == "__main__":
                 ('values','wsize',[30]),
                 ('values','npos',[1]),
                 ('values','nneg',[10]),
-                ('values','lr',[0.01,.005]),
+                ('values','lr',[.1,.05,0.01]),
                 ('values','lambda',[.0]),
                 ('values','margin',[1.]),
                 ('values','bs',[10]) ]
